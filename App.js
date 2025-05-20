@@ -1,124 +1,104 @@
-import React, { useState, useEffect } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity } from 'react-native';
-import Autocomplete from 'react-native-autocomplete-input';
+import React, { useState } from 'react';
+import { View, Text, TextInput, FlatList, StyleSheet, Button, ScrollView } from 'react-native';
+import ScanCard from './ScanCard';
 import { supabase } from './supabase';
 
 export default function App() {
+  const [showScanner, setShowScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [students, setStudents] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [results, setResults] = useState([]);
 
-  useEffect(() => {
-    const fetchStudents = async () => {
-      const { data, error } = await supabase.from('cpt419_students').select('*');
-      if (!error) setStudents(data);
-      else console.error(error);
-    };
-    fetchStudents();
-  }, []);
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
 
-  const onSearch = (text) => {
-    setSearchQuery(text);
-    setSelected(null);
-    const matches = students.filter((s) =>
-      s.full_name.toLowerCase().includes(text.toLowerCase())
-    );
-    setFiltered(matches);
+    const { data, error } = await supabase
+      .from('cpt419_students')
+      .select('*')
+      .or(`matric_number.ilike.%${searchQuery}%,student_id.ilike.%${searchQuery}%,full_name.ilike.%${searchQuery}%`);
+
+    if (error) {
+      console.error("Search error:", error.message);
+      return;
+    }
+
+    setResults(data);
   };
 
-  const handleSelect = (item) => {
-    setSearchQuery(item.full_name);
-    setFiltered([]);
-    setSelected(item);
-  };
+  const renderStudent = ({ item }) => (
+    <View style={styles.card}>
+      <Text style={styles.name}>{item.full_name}</Text>
+      <Text>Matric: {item.matric_number}</Text>
+      <Text>Student ID: {item.student_id}</Text>
+      <Text>Department: {item.department}</Text>
+      <Text>Future Occupation: {item.future_occupation}</Text>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Student CPT Search</Text>
-      <Autocomplete
-        autoCapitalize="none"
-        autoCorrect={false}
-        data={searchQuery === '' ? [] : filtered}
-        defaultValue={searchQuery}
-        onChangeText={onSearch}
-        placeholder="Search student by name"
-        inputContainerStyle={styles.inputContainer}
-        containerStyle={styles.autoCompleteContainer}
-        listStyle={styles.listStyle}
-        flatListProps={{
-          keyExtractor: (_, i) => i.toString(),
-          renderItem: ({ item }) => (
-            <TouchableOpacity onPress={() => handleSelect(item)}>
-              <Text style={styles.autoItem}>{item.full_name}</Text>
-            </TouchableOpacity>
-          )
-        }}
-      />
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>🎓 FUTMINNA ID Card OCR App</Text>
 
-      {selected && (
-        <View style={styles.card}>
-          <Text style={styles.name}>{selected.full_name}</Text>
-          <Text style={styles.occupation}>Current: {selected.current_occupation}</Text>
-          <Text style={styles.future}>Future: {selected.future_occupation}</Text>
-        </View>
+      <Button title={showScanner ? "Back to Search" : "Scan New ID"} onPress={() => setShowScanner(!showScanner)} />
+
+      {showScanner ? (
+        <ScanCard onUploadComplete={() => setShowScanner(false)} />
+      ) : (
+        <>
+          <TextInput
+            placeholder="Search by Matric No, Name or ID"
+            style={styles.input}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          <Button title="Search" onPress={handleSearch} />
+
+          {results.length > 0 && (
+            <>
+              <Text style={styles.resultCount}>{results.length} result(s) found</Text>
+              <FlatList
+                data={results}
+                keyExtractor={(item) => item.id}
+                renderItem={renderStudent}
+              />
+            </>
+          )}
+        </>
       )}
-    </SafeAreaView>
+    </ScrollView>
   );
 }
 
-const { width } = Dimensions.get('window');
-
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    paddingTop: 70,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
+    padding: 20,
+    paddingBottom: 60,
   },
   title: {
     fontSize: 22,
-    fontWeight: '600',
-    marginBottom: 10,
+    fontWeight: 'bold',
+    marginVertical: 20,
     textAlign: 'center',
   },
-  autoCompleteContainer: {
-    zIndex: 1,
-    marginBottom: 20,
-  },
-  inputContainer: {
+  input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-  },
-  listStyle: {
-    maxHeight: 150,
-  },
-  autoItem: {
+    borderColor: '#aaa',
     padding: 10,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-    fontSize: 16,
+    borderRadius: 8,
+    marginVertical: 10,
   },
   card: {
-    backgroundColor: '#f0f8ff',
-    padding: 20,
-    borderRadius: 12,
-    marginTop: 10,
+    backgroundColor: '#f2f2f2',
+    padding: 15,
+    marginVertical: 10,
+    borderRadius: 10,
   },
   name: {
-    fontSize: width > 400 ? 20 : 18,
     fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  occupation: {
     fontSize: 16,
-    color: '#333',
   },
-  future: {
-    fontSize: 16,
-    color: '#777',
-    marginTop: 4,
-  },
+  resultCount: {
+    marginTop: 10,
+    marginBottom: 5,
+    fontStyle: 'italic',
+  }
 });
